@@ -1,0 +1,25 @@
+# Core OCR
+paddlepaddle==3.2.2      # CPU only (GPU not available for JetPack 6)
+paddleocr==3.6.0
+
+# ONNX export (install paddle2onnx with --no-deps to skip onnxoptimizer)
+paddle2onnx==2.1.0
+onnx>=1.16,<2
+
+# ONNX simplify (required for OpenCV DNN compatibility)
+onnxsim>=0.4
+
+# Image processing (use system CUDA OpenCV, NOT pip version)
+# opencv-python should NOT be installed via pip on Jetson!
+# System OpenCV 4.10.0 with CUDA is at /usr/local/
+numpy<2                  # Must be 1.x for system OpenCV compatibility
+Pillow>=9.0              # Chinese font rendering
+
+# Optional: ONNX Runtime (backup inference engine)
+# onnxruntime>=1.17
+
+# Note: On Jetson, TensorRT 10.3.0 is pre-installed at
+# /usr/lib/python3.10/dist-packages/tensorrt/
+# No pip install needed; link to venv if required:
+# ln -sf /usr/lib/python3.10/dist-packages/tensorrt /path/to/venv/lib/python3.10/site-packages/
+# ln -sf /usr/lib/python3.10/dist-packages/tensorrt-10.3.0.dist-info /path/to/venv/lib/python3.10/site-packages/

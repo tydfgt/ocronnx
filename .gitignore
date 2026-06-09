@@ -1,0 +1,24 @@
+# Python
+venv_paddleocr/
+__pycache__/
+*.pyc
+*.pyo
+
+# Large files
+PaddleOCR-main/
+PaddleOCR-main.zip
+*.tar
+*.tar.gz
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Temp
+*.swp
+*.swo
+*~
