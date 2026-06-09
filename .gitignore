@@ -22,3 +22,7 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Docs (keep README.md only)
+*.md
+!README.md
