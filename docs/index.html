@@ -1,205 +1,266 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ocronnx - PP-OCRv5 ONNX 推理引擎 for Jetson</title>
-    <style>
-        :root {
-            --bg: #0d1117;
-            --card: #161b22;
-            --border: #30363d;
-            --text: #c9d1d9;
-            --accent: #58a6ff;
-            --green: #3fb950;
-            --orange: #d29922;
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-            background: var(--bg); color: var(--text);
-            line-height: 1.6; max-width: 900px; margin: 0 auto; padding: 2rem 1rem;
-        }
-        h1 { font-size: 2.2rem; margin-bottom: 0.5rem; }
-        h2 { font-size: 1.5rem; margin: 2rem 0 1rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--border); }
-        h3 { font-size: 1.1rem; margin: 1.2rem 0 0.5rem; }
-        p { margin: 0.8rem 0; }
-        a { color: var(--accent); text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        code {
-            background: #1c2128; padding: 0.15em 0.4em; border-radius: 4px;
-            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
-            font-size: 0.9em;
-        }
-        pre {
-            background: #1c2128; padding: 1rem; border-radius: 6px;
-            overflow-x: auto; font-size: 0.85rem; line-height: 1.5;
-        }
-        .badge {
-            display: inline-block; padding: 0.2em 0.6em; border-radius: 4px;
-            font-size: 0.85em; margin-right: 0.3em; font-weight: 600;
-        }
-        .badge-green  { background: #1a3a2a; color: var(--green); }
-        .badge-blue   { background: #1a2a3a; color: var(--accent); }
-        .badge-orange { background: #3a2a1a; color: var(--orange); }
-        .card {
-            background: var(--card); border: 1px solid var(--border);
-            border-radius: 8px; padding: 1.2rem; margin: 1rem 0;
-        }
-        table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
-        th, td { padding: 0.5rem 0.8rem; text-align: left; border-bottom: 1px solid var(--border); }
-        th { font-weight: 600; }
-        .hero { text-align: center; padding: 2rem 0; }
-        .hero p { font-size: 1.1rem; color: #8b949e; }
-        .btn {
-            display: inline-block; padding: 0.5rem 1.2rem; border-radius: 6px;
-            font-weight: 600; text-decoration: none; margin: 0.3rem;
-        }
-        .btn-primary { background: #238636; color: #fff; }
-        .btn-primary:hover { background: #2ea043; text-decoration: none; }
-        .btn-outline { border: 1px solid var(--border); color: var(--text); }
-        .btn-outline:hover { background: var(--card); text-decoration: none; }
-        .highlight { color: var(--green); font-weight: 600; }
-        footer { text-align: center; margin-top: 3rem; padding: 1rem; color: #8b949e; font-size: 0.85rem; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ocronnx — PP-OCRv5 ONNX 推理引擎 for Jetson Orin Nano</title>
+<style>
+:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#c9d1d9;--accent:#58a6ff;--green:#3fb950;--orange:#d29922;--red:#f85149;--purple:#a371f7}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.7;max-width:920px;margin:0 auto;padding:2rem 1rem}
+h1{font-size:2.2rem;margin-bottom:.5rem}
+h2{font-size:1.5rem;margin:2.5rem 0 1rem;padding-bottom:.3rem;border-bottom:1px solid var(--border)}
+h3{font-size:1.15rem;margin:1.4rem 0 .6rem;color:var(--accent)}
+p{margin:.8rem 0}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+code{background:#1c2128;padding:.15em .4em;border-radius:4px;font-family:'SFMono-Regular',Consolas,monospace;font-size:.88em}
+pre{background:#1c2128;padding:1rem;border-radius:6px;overflow-x:auto;font-size:.82rem;line-height:1.5}
+.badge{display:inline-block;padding:.2em .6em;border-radius:4px;font-size:.82em;margin-right:.3em;font-weight:600}
+.bg-g{background:#1a3a2a;color:var(--green)}.bg-b{background:#1a2a3a;color:var(--accent)}.bg-o{background:#3a2a1a;color:var(--orange)}.bg-p{background:#2a1a3a;color:var(--purple)}.bg-r{background:#3a1a1a;color:var(--red)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1.2rem;margin:1rem 0}
+table{width:100%;border-collapse:collapse;margin:1rem 0}
+th,td{padding:.5rem .8rem;text-align:left;border-bottom:1px solid var(--border)}
+th{font-weight:600}
+.hero{text-align:center;padding:2rem 0}
+.hero p{font-size:1.1rem;color:#8b949e}
+.btn{display:inline-block;padding:.5rem 1.2rem;border-radius:6px;font-weight:600;text-decoration:none;margin:.3rem}
+.btn-p{background:#238636;color:#fff}.btn-p:hover{background:#2ea043;text-decoration:none}
+.btn-o{border:1px solid var(--border);color:var(--text)}.btn-o:hover{background:var(--card);text-decoration:none}
+.hl{color:var(--green);font-weight:600}
+footer{text-align:center;margin-top:3rem;padding:1rem;color:#8b949e;font-size:.85rem}
+.note{background:#1a2a1a;border-left:3px solid var(--green);padding:.6rem 1rem;margin:1rem 0;border-radius:0 6px 6px 0;font-size:.9rem}
+.warn{background:#2a1a1a;border-left:3px solid var(--red);padding:.6rem 1rem;margin:1rem 0;border-radius:0 6px 6px 0;font-size:.9rem}
+.toc{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1rem}
+.toc ul{list-style:none;padding-left:1rem}.toc li{margin:.3rem 0}
+.flow{text-align:center;padding:1rem;font-family:monospace;font-size:.85rem;line-height:1.8;color:var(--accent)}
+</style>
 </head>
 <body>
 
 <div class="hero">
-    <h1>🚀 ocronnx</h1>
-    <p>PP-OCRv5 ONNX + OpenCV DNN 推理引擎 for NVIDIA Jetson Orin Nano</p>
-    <p>
-        <span class="badge badge-green">6x Faster</span>
-        <span class="badge badge-blue">CUDA 12.6</span>
-        <span class="badge badge-orange">JetPack 6</span>
-    </p>
-    <p style="margin-top:1.5rem;">
-        <a href="https://github.com/tydfgt/ocronnx" class="btn btn-primary">⭐ GitHub</a>
-        <a href="#quickstart" class="btn btn-outline">快速开始</a>
-    </p>
+<h1>🚀 ocronnx</h1>
+<p>在 Jetson Orin Nano 上以 <strong class="hl">6 倍速</strong> 运行 PP-OCRv5 中文 OCR</p>
+<p>
+<span class="badge bg-g">6× Faster</span>
+<span class="badge bg-b">ONNX</span>
+<span class="badge bg-o">JetPack 6</span>
+<span class="badge bg-p">PP-OCRv5</span>
+<span class="badge bg-r">No PaddlePaddle GPU</span>
+</p>
+<p style="margin-top:1.5rem">
+<a href="https://github.com/tydfgt/ocronnx" class="btn btn-p">⭐ Star on GitHub</a>
+<a href="#quickstart" class="btn btn-o">快速开始</a>
+<a href="#knowledge" class="btn btn-o">基础知识</a>
+</p>
 </div>
 
-<h2>📊 性能</h2>
-<div class="card">
-    <table>
-        <tr><th>方案</th><th>检测</th><th>识别</th><th>总耗时</th><th>提速</th></tr>
-        <tr><td>C++ Paddle Inference</td><td>~2s</td><td>~3s</td><td>~5.5s</td><td>基准</td></tr>
-        <tr><td><strong>ocronnx (本项目)</strong></td><td>100ms</td><td>900ms</td><td><strong>~1.0s</strong></td><td><strong class="highlight">6×</strong></td></tr>
-    </table>
-    <p style="font-size:0.9rem;color:#8b949e;">测试图片: 896×528, 30个文字区域, Jetson Orin Nano Super 8GB</p>
+<div class="toc">
+<strong>📑 目录</strong>
+<ul>
+<li><a href="#why">1. 为什么做这个项目</a></li>
+<li><a href="#knowledge">2. 基础知识 (OCR/PP-OCRv5/ONNX/PIR/DBNet/SVTR/CTC)</a></li>
+<li><a href="#arch">3. 技术架构</a></li>
+<li><a href="#perf">4. 性能</a></li>
+<li><a href="#quickstart">5. 快速开始</a></li>
+<li><a href="#structure">6. 项目结构 &amp; 命令行参数</a></li>
+<li><a href="#export">7. 模型导出</a></li>
+<li><a href="#faq">8. FAQ</a></li>
+</ul>
 </div>
 
-<h2>✨ 特性</h2>
+<!-- ═══ 1. WHY ═══ -->
+<h2 id="why">1. 为什么做这个项目</h2>
 <div class="card">
-    <ul style="list-style:none;padding:0;">
-        <li>⚡ <strong>6倍提速</strong> — 比 C++ Paddle Inference 快 6 倍</li>
-        <li>🎯 <strong>精度对齐</strong> — 复用 PaddleOCR 原生后处理</li>
-        <li>📦 <strong>轻量依赖</strong> — 无需 PaddlePaddle GPU 运行时</li>
-        <li>🐍 <strong>纯 Python</strong> — 无需编译 C++</li>
-        <li>🇨🇳 <strong>中文友好</strong> — PIL + NotoSerifCJK 字体渲染</li>
-    </ul>
+<h3>背景</h3>
+<p>在 Jetson Orin Nano 上做中文 OCR，PaddleOCR 是最成熟的开源方案。但 PaddlePaddle 官方<strong>至今未发布 JetPack 6 (L4T 36.x) 的 GPU 预编译包</strong>。</p>
+<h3>已尝试的方案</h3>
+<table>
+<tr><th>方案</th><th>问题</th><th>速度</th></tr>
+<tr><td>PaddleOCR Python CPU</td><td>ARM 无 MKL/MKLDNN → 崩溃</td><td>❌</td></tr>
+<tr><td>C++ Paddle Inference (JetPack 5预编译)</td><td>TRT不兼容, FP16更慢</td><td>~5.5s</td></tr>
+<tr><td>从源码编译 PaddlePaddle</td><td>4h+, 8GB内存不足</td><td>❌</td></tr>
+<tr><td><strong>ONNX + OpenCV DNN (本项目)</strong></td><td>—</td><td><strong>~1.0s ✅</strong></td></tr>
+</table>
+<p><strong>核心思路</strong>: 将 PP-OCRv5 导出为 ONNX 通用格式，用 Jetson 上已有的 OpenCV DNN + CUDA 做推理，完全绕过 PaddlePaddle GPU 运行时。</p>
 </div>
 
-<h2>🔧 技术栈</h2>
+<!-- ═══ 2. KNOWLEDGE ═══ -->
+<h2 id="knowledge">2. 基础知识详解</h2>
+
 <div class="card">
-    <table>
-        <tr><td>模型</td><td>PP-OCRv5 Mobile (DBNet 检测 + SVTR 识别)</td></tr>
-        <tr><td>推理引擎</td><td>OpenCV 4.10.0 DNN + CUDA 12.6</td></tr>
-        <tr><td>模型格式</td><td>ONNX (PIR → paddle.onnx.export → onnxsim)</td></tr>
-        <tr><td>后处理</td><td>PaddleOCR 原生 DBPostProcess + CTCLabelDecode</td></tr>
-        <tr><td>平台</td><td>NVIDIA Jetson Orin Nano (JetPack 6 / L4T R36.5)</td></tr>
-    </table>
+<h3>2.1 现代 OCR 的两阶段流程</h3>
+<div class="flow">输入图片 → [<strong>文字检测</strong>] → 文字位置 → [<strong>文字识别</strong>] → 文本内容</div>
+<p><strong>文字检测 (Detection)</strong>: 在图中找出"哪里"有文字，输出坐标框。<br>
+<strong>文字识别 (Recognition)</strong>: 把每个框里的图"读"出来，输出文字。</p>
 </div>
 
-<h2 id="quickstart">🚀 快速开始</h2>
 <div class="card">
-<pre><code># 克隆仓库
-git clone https://github.com/tydfgt/ocronnx.git
+<h3>2.2 PP-OCRv5 模型家族</h3>
+<table>
+<tr><th>子模型</th><th>架构</th><th>大小</th><th>功能</th></tr>
+<tr><td>PP-OCRv5_mobile_det</td><td>DBNet (CNN骨架)</td><td>4.8MB</td><td>找出文字位置</td></tr>
+<tr><td>PP-OCRv5_mobile_rec</td><td>SVTR (Transformer骨架)</td><td>17MB</td><td>识别文字内容</td></tr>
+</table>
+<p>Mobile 版专为<strong>边缘设备</strong>设计，体积小速度快。</p>
+</div>
+
+<div class="card">
+<h3>2.3 ONNX — 通用模型格式</h3>
+<p>不同框架各有专有格式。ONNX (Open Neural Network Exchange) 提供<strong>中间表示</strong>，让模型在框架间迁移：</p>
+<div class="flow">PaddlePaddle → paddle.onnx.export() → ONNX → OpenCV DNN / ONNX Runtime / TensorRT</div>
+</div>
+
+<div class="card">
+<h3>2.4 PIR 格式 (PaddlePaddle 3.x 新格式)</h3>
+<p>PP-OCRv5 模型文件:</p>
+<ul>
+<li><code>inference.json</code> — 模型结构 (序列化的 PIR program)</li>
+<li><code>inference.pdiparams</code> — 模型权重</li>
+</ul>
+<p>这与旧版 <code>.pdmodel</code> 格式不同。</p>
+<div class="warn"><strong>⚠️</strong> PIR 不能用 <code>paddle.jit.load(model_dir)</code> 加载（报 <code>KeyError: 'forward'</code>）。必须传文件前缀: <code>paddle.jit.load(f'{dir}/inference')</code></div>
+</div>
+
+<div class="card">
+<h3>2.5 为什么用 OpenCV DNN</h3>
+<p>Jetson 已自编译 OpenCV 4.10.0 + CUDA（含 DNN CUDA 后端）:</p>
+<ul>
+<li>✅ 无需额外推理引擎</li>
+<li>✅ 直接利用 CUDA 加速</li>
+<li>✅ 无需 PaddlePaddle 运行时</li>
+</ul>
+<p>局限: ONNX 算子支持不如 ONNX Runtime 全面，需 <code>onnxsim</code> 简化模型。</p>
+</div>
+
+<div class="card">
+<h3>2.6 DBNet 文字检测原理</h3>
+<ol>
+<li>图片缩放到 960px (长边) → 归一化</li>
+<li>CNN 输出<strong>概率图</strong> (每个像素是文字的概率)</li>
+<li>阈值 0.3 二值化 → 白色=文字</li>
+<li>OpenCV <code>findContours</code> → 文本框</li>
+<li>Vatti 裁剪算法 (unclip) 扩展文本框</li>
+</ol>
+<div class="note">DBNet 要求输入尺寸是 <strong>32 的倍数</strong>（下采样 1/32），否则内部 Add 操作维度不匹配。</div>
+</div>
+
+<div class="card">
+<h3>2.7 SVTR 文字识别原理</h3>
+<ol>
+<li>裁剪文字区域 → 缩放高度到 48px → 归一化至 [-1, 1]</li>
+<li>Transformer 编码器提取特征 → 输出每个位置的字符概率</li>
+<li><strong>CTC 解码</strong>处理不定长序列</li>
+</ol>
+<div class="note">识别模型 <code>max_imgW</code> 默认 <strong>3200</strong>（不是 320）。设为 320 会导致长文本无法识别。</div>
+</div>
+
+<div class="card">
+<h3>2.8 CTC 解码详解</h3>
+<p>模型输出: (T, 18385) — T 个时间步 × 18385 个字符概率。</p>
+<p>解码规则: ① 去重 ② 去 blank (索引0)</p>
+<p>例: <code>[b, 登, 登, b, 机, b, 牌]</code> → <code>"登机牌"</code> (b=blank)</p>
+<p><strong>字典结构</strong>: 索引 0=blank, 1=空格, 2~18384=18383个字符 (含中/英/数字/标点/emoji)</p>
+</div>
+
+<!-- ═══ 3. ARCH ═══ -->
+<h2 id="arch">3. 技术架构</h2>
+<div class="card">
+<div class="flow">
+输入图片 (BGR)<br>
+&nbsp; ├─→ [检测: resize 960 → ONNX → DBPostProcess] → 30个文本框<br>
+&nbsp; └─→ [识别: 逐框裁剪 → resize 48×W → ONNX → CTCLabelDecode] → 文字<br>
+输出: [(文字, 置信度, 坐标), ...] → PIL 中文渲染 → 可视化
+</div>
+</div>
+
+<!-- ═══ 4. PERF ═══ -->
+<h2 id="perf">4. 性能</h2>
+<div class="card">
+<table>
+<tr><th>方案</th><th>检测</th><th>识别 (30框)</th><th>总耗时</th><th>提速</th></tr>
+<tr><td>C++ Paddle Inference</td><td>~2s</td><td>~3s</td><td>~5.5s</td><td>基准</td></tr>
+<tr><td><strong>ocronnx</strong></td><td>100ms</td><td>900ms</td><td><strong>~1.0s</strong></td><td><strong class="hl">6×</strong></td></tr>
+</table>
+</div>
+<div class="card">
+<h3>每框耗时分解</h3>
+<table>
+<tr><td>裁剪+预处理</td><td>~1ms (1%)</td></tr>
+<tr><td><strong>GPU 推理</strong></td><td><strong>79ms (97%) ← 瓶颈</strong></td></tr>
+<tr><td>CTC 解码</td><td>~2ms (2%)</td></tr>
+</table>
+</div>
+
+<!-- ═══ 5. QUICKSTART ═══ -->
+<h2 id="quickstart">5. 快速开始</h2>
+<div class="card">
+<pre><code>git clone https://github.com/tydfgt/ocronnx.git
 cd ocronnx
-
-# 创建环境
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-
-# 推理
-python ocr_opencv_dnn.py -i test.jpg -o result.jpg
-
-# 性能测试
-python ocr_opencv_dnn.py -i test.jpg --benchmark</code></pre>
+python ocr_opencv_dnn.py -i test.jpg -o result.jpg</code></pre>
 </div>
-
-<h2>📋 环境要求</h2>
 <div class="card">
-    <table>
-        <tr><td>设备</td><td>Jetson Orin Nano / AGX Orin</td></tr>
-        <tr><td>JetPack / L4T</td><td>6.0 / R36.x</td></tr>
-        <tr><td>CUDA</td><td>12.x</td></tr>
-        <tr><td>OpenCV</td><td>4.5+ (需 CUDA 编译)</td></tr>
-        <tr><td>Python</td><td>3.10+</td></tr>
-        <tr><td>内存</td><td>8GB+ (建议 11GB swap)</td></tr>
-    </table>
+<h3>环境要求</h3>
+<table>
+<tr><td>设备</td><td>Jetson Orin Nano / AGX Orin</td></tr>
+<tr><td>JetPack</td><td>6.x / L4T R36.x</td></tr>
+<tr><td>OpenCV</td><td>4.5+ CUDA 编译 (非 pip 版)</td></tr>
+<tr><td>Python</td><td>3.10+</td></tr>
+</table>
+<div class="warn"><strong>⚠️</strong> 不能 <code>pip install opencv-python</code>！会覆盖系统 CUDA 版。脚本已自动处理。</div>
 </div>
 
-<h2>📁 项目结构</h2>
+<!-- ═══ 6. STRUCTURE ═══ -->
+<h2 id="structure">6. 项目结构 &amp; 命令行</h2>
 <div class="card">
 <pre><code>ocronnx/
 ├── ocr_opencv_dnn.py          # 主推理脚本
-├── export_to_onnx.py          # PIR → ONNX 导出
-├── requirements.txt           # Python 依赖
-├── README.md                  # 项目说明
-├── models/
-│   ├── PP-OCRv5_mobile_det_sim.onnx   # 检测 ONNX (4.6MB)
-│   ├── PP-OCRv5_mobile_rec_sim.onnx   # 识别 ONNX (16MB)
-│   └── ppocr_keys_v1.txt             # 字符字典 (18383字符)
-└── PaddleOCR-main/            # PaddleOCR 源码 (后处理复用)
-</code></pre>
+├── export_to_onnx.py          # PIR→ONNX 导出
+├── requirements.txt           # 依赖
+├── models/                    # ONNX 模型 + 字典
+└── docs/                      # GitHub Pages</code></pre>
+</div>
+<div class="card">
+<h3>命令行参数</h3>
+<pre><code>python ocr_opencv_dnn.py -i 图片.jpg -o 结果.jpg     # 标准推理
+python ocr_opencv_dnn.py -i 图片.jpg --det_size 640 # 快速模式
+python ocr_opencv_dnn.py -i 图片.jpg --benchmark    # 性能测试
+python ocr_opencv_dnn.py -i 图片.jpg --cpu          # CPU 模式</code></pre>
 </div>
 
-<h2>📖 命令行参数</h2>
+<!-- ═══ 7. EXPORT ═══ -->
+<h2 id="export">7. 模型导出</h2>
 <div class="card">
-<pre><code>python ocr_opencv_dnn.py --help
-
-  -i, --image    输入图片路径 (必填)
-  -o, --output   输出图片路径 (默认: output.jpg)
-  --det_size     检测 resize 边长 (默认: 960, 640 更快)
-  --benchmark    性能测试模式
-  --cpu          使用 CPU 推理 (默认 CUDA)</code></pre>
-</div>
-
-<h2>⚙️ 模型导出 (可选)</h2>
-<div class="card">
-<p>项目已包含预导出的 ONNX 模型。如需重新导出：</p>
-<pre><code># 下载 PP-OCRv5 Mobile 模型
+<p>仓库已含预导出 ONNX。重新导出:</p>
+<pre><code># 下载 PIR 模型
 wget https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv5_mobile_det_infer.tar
 wget https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv5_mobile_rec_infer.tar
 tar xf PP-OCRv5_mobile_det_infer.tar
 tar xf PP-OCRv5_mobile_rec_infer.tar
-
-# 导出 ONNX
+# 导出
 python export_to_onnx.py</code></pre>
 </div>
 
-<h2>❓ FAQ</h2>
+<!-- ═══ 8. FAQ ═══ -->
+<h2 id="faq">8. FAQ</h2>
 <div class="card">
-    <h3>Q: 为什么不用 PaddlePaddle GPU？</h3>
-    <p>PaddlePaddle 官方未发布 JetPack 6 (L4T 36.x) 的 GPU 预编译包，仅支持到 JetPack 5.x。</p>
-
-    <h3>Q: 能批处理吗？</h3>
-    <p>当前模型架构限制 batch > 1，OpenCV DNN 会报 Concat 维度错误。</p>
-
-    <h3>Q: TensorRT 呢？</h3>
-    <p>Jetson Orin Nano 8GB 上 TRT 引擎编译极慢（检测 ~2min, 识别 ~10min），不实用。</p>
-
-    <h3>Q: 中文显示不了？</h3>
-    <p>已用 PIL + NotoSerifCJK 字体修复。系统需安装 <code>fonts-noto-cjk</code>。</p>
+<h3>Q: 能批处理吗？</h3>
+<p>不能。模型内部 Concat 操作要求 batch 维度一致，变长输入不兼容。</p>
+<h3>Q: TensorRT 呢？</h3>
+<p>Jetson 8GB 上 TRT 编译极慢（2-10 分钟），opt_level=2 输出错误，不实用。</p>
+<h3>Q: 中文显示不了？</h3>
+<p>已用 PIL + NotoSerifCJK 修复。<code>cv2.putText</code> 不支持中文。</p>
+<h3>Q: NumPy 报错？</h3>
+<p><code>pip install 'numpy&lt;2'</code> — 系统 OpenCV 用 NumPy 1.x 编译。</p>
 </div>
 
 <h2>📄 License</h2>
 <p>Apache 2.0 © 2026 <a href="https://github.com/tydfgt">tydfgt</a></p>
 
 <footer>
-    Built with ❤️ on Jetson Orin Nano | <a href="https://github.com/tydfgt/ocronnx">GitHub</a>
+Built on Jetson Orin Nano · <a href="https://github.com/tydfgt/ocronnx">GitHub</a>
 </footer>
 
 </body>
