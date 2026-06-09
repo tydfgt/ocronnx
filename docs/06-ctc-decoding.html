@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CTC 解码 — ocronnx 基础知识</title>
+<style>
+:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#c9d1d9;--accent:#58a6ff;--green:#3fb950;--orange:#d29922;--red:#f85149;--purple:#a371f7}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);line-height:1.8;max-width:920px;margin:0 auto;padding:2rem 1rem}
+h1{font-size:2rem}h2{font-size:1.5rem;margin:2.5rem 0 1rem;padding-bottom:.3rem;border-bottom:1px solid var(--border)}
+h3{font-size:1.15rem;margin:1.4rem 0 .6rem;color:var(--accent)}h4{font-size:1.05rem;margin:1rem 0 .5rem;color:var(--orange)}
+p,li{margin:.6rem 0}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+code{background:#1c2128;padding:.15em .4em;border-radius:4px;font-family:Consolas,monospace;font-size:.88em}
+pre{background:#1c2128;padding:1rem;border-radius:6px;overflow-x:auto;font-size:.82rem;line-height:1.5}
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1.2rem;margin:1rem 0}
+table{width:100%;border-collapse:collapse;margin:1rem 0}th,td{padding:.5rem .8rem;text-align:left;border-bottom:1px solid var(--border)}th{font-weight:600}
+.note{background:#1a2a1a;border-left:3px solid var(--green);padding:.6rem 1rem;margin:1rem 0;border-radius:0 6px 6px 0;font-size:.9rem}
+.warn{background:#2a1a1a;border-left:3px solid var(--red);padding:.6rem 1rem;margin:1rem 0;border-radius:0 6px 6px 0;font-size:.9rem}
+nav{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1rem;margin:1rem 0}
+nav a{margin-right:1rem;white-space:nowrap}
+footer{text-align:center;margin-top:3rem;padding:1rem;color:#8b949e;font-size:.85rem}
+ul,ol{padding-left:1.5rem}
+.breadcrumb{color:#8b949e;font-size:.9rem;margin-bottom:1rem}
+.breadcrumb a{color:var(--accent)}
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="05-svtr-recognition.html">← 上一篇</a> | <a href="index.html">首页</a> | <a href="07-jetson-deploy.html">下一篇: Jetson 部署 →</a></p>
+
+<h1>6. CTC 解码算法</h1>
+<p>CTC = <strong>C</strong>onnectionist <strong>T</strong>emporal <strong>C</strong>lassification（联结主义时序分类）。解决的问题是：<strong>如何把不等长的模型输出序列对齐到文字序列？</strong></p>
+
+<div class="card">
+<h2>6.1 核心问题：长度不对齐</h2>
+<p>识别模型的输出是 (T, 18385)——T 个时间步，每个时间步一个 18385 维向量。但最终文字只有几个或几十个字符。如何从中提取文字？</p>
+<pre><code>模型输出: T 列, 每列 18385 维概率分布
+         (T ≈ 文字图片宽度 / 4)
+
+期望输出: "你好世界" (4 个字符)
+
+问题: T 个概率列 → 只有几个字符, 如何对应?</code></pre>
+<p>类比电器工程：就像 <strong>SPI 总线的 Chip Select 信号</strong>——多个时钟周期（T）传输一个有意义的数据字节（字符），需要'blank'作为分隔符。</p>
+</div>
+
+<div class="card">
+<h2>6.2 Blank 标记</h2>
+<p>CTC 引入一个特殊的 <strong>blank</strong> 标记（索引 0）：</p>
+<ul>
+<li>blank = "这里没有字符"</li>
+<li>blank 用于填充和分隔</li>
+<li>就像 SPI 的 NSS/CS 高电平期间的无效数据</li>
+</ul>
+
+<h3>Blank 的作用</h3>
+<pre><code>时间步排列:
+  T0  T1  T2  T3  T4  T5  T6  T7  T8  T9
+  bl  你  bl  你  好  bl  bl  世  界  bl
+   ↓ 去重 + 去blank
+   ↓
+  "你好世界"</code></pre>
+<ul>
+<li>blank 分隔相同字符："你blank你"→中间有blank所以保留两个"你"</li>
+<li>连续重复字符被合并："世世"→"世"</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>6.3 CTC 解码规则 (贪心法)</h2>
+<pre><code>算法:
+  1. 取每个时间步概率最大的字符索引
+  2. 删除所有 blank (索引0)
+  3. 合并相邻重复字符
+  4. 查字典把索引→文字</code></pre>
+
+<h3>示例</h3>
+<pre><code>索引序列: [0,5,0,5,143,0,0,640,641,0]
+  ↓ 去blank
+  [5,5,143,640,641]
+  ↓ 合并相邻重复
+  [5,143,640,641]
+  ↓ 查字典 (ppocr_keys_v1.txt)
+  5  → '你'
+  143→ '好'
+  640→ '世'
+  641→ '界'
+  ↓ 拼接
+  "你好世界"</code></pre>
+</div>
+
+<div class="card">
+<h2>6.4 字符集 (Dictionary)</h2>
+<p>识别模型输出索引本身没有意义——需要通过<strong>字典文件</strong>把索引映射到实际字符。</p>
+
+<h3>ppocr_keys_v1.txt 结构</h3>
+<pre><code>行 0: blank (隐式)
+行 1: ' ' (空格, use_space_char=True)
+行 2: 'à' (全角空格)
+行 3: '!'
+行 4: '"'
+...
+
+行 3~6832: 常用/生僻汉字
+行 6833~18384: 英文、数字、标点、emoji、特殊符号</code></pre>
+<div class="warn"><strong>⚠️</strong> 字典必须加载为 18385 行（含 blank）。<code>use_space_char=True</code> 时多一行空格，本项目必须启用此选项，否则识别结果全错。</div>
+</div>
+
+<div class="card">
+<h2>6.5 为什么用 CTC 而不是 CRNN Attention？</h2>
+<table>
+<tr><th></th><th>CTC</th><th>Attention Decoder</th></tr>
+<tr><td>对齐方式</td><td>隐式 (无对齐标注)</td><td>显式 (需要对齐标注)</td></tr>
+<tr><td>训练难度</td><td>简单</td><td>复杂</td></tr>
+<tr><td>推理速度</td><td>快 (O(T))</td><td>慢 (O(T<sup>2</sup>))</td></tr>
+<tr><td>长文本</td><td>一般</td><td>好</td></tr>
+<tr><td>短文本</td><td>好</td><td>一般</td></tr>
+<tr><td>适用场景</td><td>OCR、语音识别</td><td>机器翻译</td></tr>
+</table>
+<p>PP-OCRv5 识别使用 CTC Head，因为 OCR 场景中文字图片是"按顺序"的——不需要 Attention 的重排序能力。</p>
+</div>
+
+<nav><a href="05-svtr-recognition.html">← 上一篇</a> <a href="index.html">首页</a> <a href="07-jetson-deploy.html">下一篇: Jetson →</a></nav>
+<footer>ocronnx · <a href="https://github.com/tydfgt/ocronnx">GitHub</a></footer>
+</body>
+</html>

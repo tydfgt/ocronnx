@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DBNet 文字检测 — ocronnx 基础知识</title>
+<style>
+:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#c9d1d9;--accent:#58a6ff;--green:#3fb950;--orange:#d29922;--red:#f85149;--purple:#a371f7}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);line-height:1.8;max-width:920px;margin:0 auto;padding:2rem 1rem}
+h1{font-size:2rem}h2{font-size:1.5rem;margin:2.5rem 0 1rem;padding-bottom:.3rem;border-bottom:1px solid var(--border)}
+h3{font-size:1.15rem;margin:1.4rem 0 .6rem;color:var(--accent)}h4{font-size:1.05rem;margin:1rem 0 .5rem;color:var(--orange)}
+p,li{margin:.6rem 0}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+code{background:#1c2128;padding:.15em .4em;border-radius:4px;font-family:Consolas,monospace;font-size:.88em}
+pre{background:#1c2128;padding:1rem;border-radius:6px;overflow-x:auto;font-size:.82rem;line-height:1.5}
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1.2rem;margin:1rem 0}
+table{width:100%;border-collapse:collapse;margin:1rem 0}th,td{padding:.5rem .8rem;text-align:left;border-bottom:1px solid var(--border)}th{font-weight:600}
+.note{background:#1a2a1a;border-left:3px solid var(--green);padding:.6rem 1rem;margin:1rem 0;border-radius:0 6px 6px 0;font-size:.9rem}
+.warn{background:#2a1a1a;border-left:3px solid var(--red);padding:.6rem 1rem;margin:1rem 0;border-radius:0 6px 6px 0;font-size:.9rem}
+nav{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1rem;margin:1rem 0}
+nav a{margin-right:1rem;white-space:nowrap}
+footer{text-align:center;margin-top:3rem;padding:1rem;color:#8b949e;font-size:.85rem}
+ul,ol{padding-left:1.5rem}
+.breadcrumb{color:#8b949e;font-size:.9rem;margin-bottom:1rem}
+.breadcrumb a{color:var(--accent)}
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="03-onnx-format.html">← 上一篇</a> | <a href="index.html">首页</a> | <a href="05-svtr-recognition.html">下一篇: SVTR 识别 →</a></p>
+
+<h1>4. DBNet 文字检测原理</h1>
+<p>DBNet = <strong>D</strong>ifferentiable <strong>B</strong>inarization Network（可微分二值化网络）。本质是一种基于<strong>图像分割</strong>的文字检测方法。</p>
+
+<div class="card">
+<h2>4.1 什么是图像分割？</h2>
+<p>图像分割就是把图片中每个像素分类。比如：</p>
+<pre><code>输入图片 (H×W×3)
+   ↓ CNN
+输出 (H×W×1) — 每个像素一个值:
+   0.0 = 背景
+   1.0 = 文字
+   中间值 = 可能是文字</code></pre>
+<p>类比电器工程：就像热成像仪——每个像素一个温度值，高温区就是"文字区域"。</p>
+</div>
+
+<div class="card">
+<h2>4.2 DBNet 处理流程 (逐步详解)</h2>
+
+<h3>Step 1: 预处理</h3>
+<pre><code>原图 (BGR, H×W×3)
+  → 长边缩放到 960px, 保持宽高比
+  → 短边 padding 到 32 的倍数 (DBNet 下采样 1/32)
+  → 归一化: mean=[0.485,0.456,0.406] std=[0.229,0.224,0.225]
+  → HWC → CHW → BCHW</code></pre>
+
+<h3>Step 2: 特征提取 (Backbone)</h3>
+<p>MobileNetV3 卷积神经网络逐层提取特征。低层检测边缘，高层检测文字区域。</p>
+<p>类比：就像用不同分辨率的放大镜看 PCB——低倍看全局布局，高倍看焊点细节。</p>
+
+<h3>Step 3: 多尺度融合 (FPN Neck)</h3>
+<p>FPN (Feature Pyramid Network) 把不同层次的特征融合在一起，既保留细节（小文字）又保留全局信息（大文字）。</p>
+
+<h3>Step 4: 输出概率图</h3>
+<p>网络输出一张 (1×H×W) 的<strong>概率图</strong>，每个像素值 0~1 表示该像素是文字的概率。</p>
+<ul>
+<li>0.98 → 99%确定是文字</li>
+<li>0.05 → 几乎确定是背景</li>
+<li>0.52 → 不确定</li>
+</ul>
+
+<h3>Step 5: 二值化</h3>
+<pre><code>概率图 &gt; 0.3 → 1 (文字)
+概率图 ≤ 0.3 → 0 (背景)</code></pre>
+<p>阈值 0.3 是经验值（来自 PP-OCRv5 配置）。</p>
+</div>
+
+<div class="card">
+<h2>4.3 从二值图到文本框</h2>
+<pre><code>二值图 (0/1)
+  ↓ cv2.findContours()
+  ↓ 找到所有白色区域的轮廓
+轮廓列表 (每个轮廓是一组坐标点)
+  ↓ cv2.approxPolyDP()
+  ↓ 用多边形近似轮廓
+  ↓ 过滤掉太小的 (&lt; 3px) 或置信度低的
+  ↓ Vatti 裁剪算法 (unclip)
+  ↓ 扩展文本框 (ratio=2.0)
+最终文本框 (四边形坐标)</code></pre>
+
+<h3>Vatti Unclip 算法</h3>
+<p>为什么需要"扩展"？卷积网络倾向输出"收缩"的文字区域（只覆盖文字核心部分）。unclip 把每个框向外扩展一定距离：</p>
+<pre><code>d = area × ratio / perimeter</code></pre>
+<ul>
+<li>ratio=1.5: 轻度扩展</li>
+<li>ratio=2.0: 中等扩展 (本项目用)</li>
+<li>ratio=3.0: 激进扩展 (可能合并相邻框)</li>
+</ul>
+<div class="note">本项目用 unclip_ratio=2.0 来补偿 ONNX 模型输出的轻微碎片化。</div>
+</div>
+
+<div class="card">
+<h2>4.4 关键参数</h2>
+<table>
+<tr><th>参数</th><th>默认值</th><th>作用</th></tr>
+<tr><td>thresh</td><td>0.3</td><td>二值化阈值。越大越保守（少框），越小越激进（多框）</td></tr>
+<tr><td>box_thresh</td><td>0.6</td><td>文本框最低置信度。低于此值的框被丢弃</td></tr>
+<tr><td>unclip_ratio</td><td>2.0</td><td>文本框扩展比例。越大框越大</td></tr>
+<tr><td>resize_long</td><td>960</td><td>长边缩放尺寸。越大越准但越慢</td></tr>
+<tr><td>max_candidates</td><td>1000</td><td>最多检测框数量</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2>4.5 为什么输入必须是 32 的倍数？</h2>
+<p>DBNet 的 MobileNetV3 backbone 有 5 次 2× 下采样（共 1/32）。如果输入尺寸不能被 32 整除，某些层的特征图尺寸不一致，Add 操作会报错：</p>
+<pre><code>ERROR: input[0]=[1,96,71,120] input[1]=[1,96,72,120]
+→ 71 ≠ 72, Add 失败!</code></pre>
+<div class="warn">本项目在预处理中自动 padding 到 32 的倍数：<code>pad_h = (32 - h % 32) % 32</code></div>
+</div>
+
+<nav><a href="03-onnx-format.html">← 上一篇</a> <a href="index.html">首页</a> <a href="05-svtr-recognition.html">下一篇: SVTR →</a></nav>
+<footer>ocronnx · <a href="https://github.com/tydfgt/ocronnx">GitHub</a></footer>
+</body>
+</html>

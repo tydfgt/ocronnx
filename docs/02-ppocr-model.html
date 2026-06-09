@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PP-OCRv5 模型 — ocronnx 基础知识</title>
+<style>
+:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#c9d1d9;--accent:#58a6ff;--green:#3fb950;--orange:#d29922;--red:#f85149;--purple:#a371f7}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);line-height:1.8;max-width:920px;margin:0 auto;padding:2rem 1rem}
+h1{font-size:2rem}h2{font-size:1.5rem;margin:2.5rem 0 1rem;padding-bottom:.3rem;border-bottom:1px solid var(--border)}
+h3{font-size:1.15rem;margin:1.4rem 0 .6rem;color:var(--accent)}
+p,li{margin:.6rem 0}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+code{background:#1c2128;padding:.15em .4em;border-radius:4px;font-family:Consolas,monospace;font-size:.88em}
+pre{background:#1c2128;padding:1rem;border-radius:6px;overflow-x:auto;font-size:.82rem;line-height:1.5}
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1.2rem;margin:1rem 0}
+table{width:100%;border-collapse:collapse;margin:1rem 0}th,td{padding:.5rem .8rem;text-align:left;border-bottom:1px solid var(--border)}th{font-weight:600}
+.note{background:#1a2a1a;border-left:3px solid var(--green);padding:.6rem 1rem;margin:1rem 0;border-radius:0 6px 6px 0;font-size:.9rem}
+.warn{background:#2a1a1a;border-left:3px solid var(--red);padding:.6rem 1rem;margin:1rem 0;border-radius:0 6px 6px 0;font-size:.9rem}
+nav{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1rem;margin:1rem 0}
+nav a{margin-right:1rem;white-space:nowrap}
+footer{text-align:center;margin-top:3rem;padding:1rem;color:#8b949e;font-size:.85rem}
+ul,ol{padding-left:1.5rem}
+.breadcrumb{color:#8b949e;font-size:.9rem;margin-bottom:1rem}
+.breadcrumb a{color:var(--accent)}
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="01-what-is-ocr.html">← 上一篇</a> | <a href="index.html">首页</a> | <a href="03-onnx-format.html">下一篇: ONNX 格式 →</a></p>
+
+<h1>2. PP-OCRv5 模型详解</h1>
+<p>PP-OCRv5 是百度 PaddleOCR 团队的第五代 OCR 模型系列。本文面向电器工程师，用尽量少的数学讲清楚。</p>
+
+<div class="card">
+<h2>2.1 什么是"模型"？</h2>
+<p>在 AI 里，"模型"就是<strong>一个函数</strong>：</p>
+<pre><code>输出 = 模型(输入)</code></pre>
+<p>类比电器工程：模型就像一个<strong>专用芯片</strong>——给它输入信号，它输出处理结果。芯片内部有大量参数（电阻、电容值），模型内部有大量<strong>权重参数</strong>（浮点数字）。</p>
+<p>PP-OCRv5 由 <strong>两个独立模型</strong> 组成：</p>
+<table>
+<tr><th>模型</th><th>类比</th><th>功能</th><th>大小</th></tr>
+<tr><td>检测模型</td><td>视觉定位芯片</td><td>找出图中文字位置</td><td>4.8MB</td></tr>
+<tr><td>识别模型</td><td>字符解码芯片</td><td>读出文字内容</td><td>17MB</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2>2.2 Mobile vs Server 版本</h2>
+<table>
+<tr><th></th><th>Mobile (本项目用)</th><th>Server</th></tr>
+<tr><td>检测大小</td><td>4.8MB</td><td>88MB</td></tr>
+<tr><td>识别大小</td><td>17MB</td><td>更大</td></tr>
+<tr><td>速度</td><td>快</td><td>慢</td></tr>
+<tr><td>精度</td><td>中 (够用)</td><td>高</td></tr>
+<tr><td>适用</td><td>边缘设备/Jetson</td><td>服务器/GPU集群</td></tr>
+</table>
+<div class="note">Mobile 版专为移动端和嵌入设备设计，在 Jetson 8GB 上是最佳选择。Server 版精度高 ~2-3%，但模型大 10 倍，推理慢很多。</div>
+</div>
+
+<div class="card">
+<h2>2.3 检测模型内部结构</h2>
+<p>检测模型用 <strong>DBNet</strong> (Differentiable Binarization Network)：</p>
+<pre><code>输入: 图片 (3通道, H×W)
+  ↓
+Backbone: MobileNetV3 (轻量 CNN) ← 提取特征
+  ↓
+Neck: FPN (Feature Pyramid Network) ← 融合多尺度特征
+  ↓
+Head: 输出概率图 (1通道, H×W) ← 每个像素是文字的概率
+  ↓
+后处理: 阈值二值化 → 轮廓提取 → 文本框</code></pre>
+<p>详细原理见 <a href="04-dbnet-detection.html">第4章 DBNet 检测</a>。</p>
+</div>
+
+<div class="card">
+<h2>2.4 识别模型内部结构</h2>
+<p>识别模型用 <strong>SVTR</strong> (Single Visual Transformer for Recognition)：</p>
+<pre><code>输入: 裁剪文字区域 (3通道, 48×W)
+  ↓
+Patch Embedding: 把图片切成小块，每块转成向量
+  ↓
+Transformer Encoder: 多层自注意力 ← 理解字符间关系
+  ↓
+CTC Head: 全连接层 → 输出每个位置的字符概率
+  ↓
+后处理: CTC 解码 → 文字内容</code></pre>
+<p>详细原理见 <a href="05-svtr-recognition.html">第5章 SVTR 识别</a>。</p>
+</div>
+
+<div class="card">
+<h2>2.5 模型文件格式: PIR</h2>
+<p>PaddlePaddle 3.x 使用新的 <strong>PIR</strong> (Paddle Intermediate Representation) 格式：</p>
+<ul>
+<li><code>inference.json</code> — 模型结构描述（约 200KB～400KB）</li>
+<li><code>inference.pdiparams</code> — 模型权重参数（检测 4.7MB，识别 16.5MB）</li>
+</ul>
+<p>这与旧版 <code>.pdmodel</code> 格式不同。PIR 是 PaddlePaddle 3.x 的统一中间表示。</p>
+<div class="warn"><strong>⚠️</strong> PIR 模型加载方式特殊：<code>paddle.jit.load('dir/inference')</code>（传文件前缀），不能用 <code>paddle.jit.load('dir')</code>。</div>
+</div>
+
+<div class="card">
+<h2>2.6 字符集 (Dictionary)</h2>
+<p>识别模型输出 18385 维向量，对应 <strong>18385 个字符类别</strong>：</p>
+<table>
+<tr><th>索引</th><th>含义</th><th>示例</th></tr>
+<tr><td>0</td><td>blank (CTC空白标记)</td><td>—</td></tr>
+<tr><td>1</td><td>空格</td><td>' '</td></tr>
+<tr><td>2</td><td>全角空格</td><td>'\u3000'</td></tr>
+<tr><td>3~6832</td><td>常用汉字 + 生僻字</td><td>一乙二十丁厂七卜...</td></tr>
+<tr><td>6833~18384</td><td>英文/数字/标点/特殊符号/emoji</td><td>A-Z, 0-9, 😀😁😂...</td></tr>
+</table>
+<p>共 18385 个字符，覆盖了现代中文 OCR 的几乎所有需求。</p>
+</div>
+
+<nav>
+<a href="01-what-is-ocr.html">← 上一篇</a>
+<a href="index.html">首页</a>
+<a href="03-onnx-format.html">下一篇: ONNX 格式 →</a>
+</nav>
+<footer>ocronnx · <a href="https://github.com/tydfgt/ocronnx">GitHub</a></footer>
+</body>
+</html>

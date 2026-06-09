@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SVTR 文字识别 — ocronnx 基础知识</title>
+<style>
+:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#c9d1d9;--accent:#58a6ff;--green:#3fb950;--orange:#d29922;--red:#f85149;--purple:#a371f7}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);line-height:1.8;max-width:920px;margin:0 auto;padding:2rem 1rem}
+h1{font-size:2rem}h2{font-size:1.5rem;margin:2.5rem 0 1rem;padding-bottom:.3rem;border-bottom:1px solid var(--border)}
+h3{font-size:1.15rem;margin:1.4rem 0 .6rem;color:var(--accent)}h4{font-size:1.05rem;margin:1rem 0 .5rem;color:var(--orange)}
+p,li{margin:.6rem 0}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+code{background:#1c2128;padding:.15em .4em;border-radius:4px;font-family:Consolas,monospace;font-size:.88em}
+pre{background:#1c2128;padding:1rem;border-radius:6px;overflow-x:auto;font-size:.82rem;line-height:1.5}
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1.2rem;margin:1rem 0}
+table{width:100%;border-collapse:collapse;margin:1rem 0}th,td{padding:.5rem .8rem;text-align:left;border-bottom:1px solid var(--border)}th{font-weight:600}
+.note{background:#1a2a1a;border-left:3px solid var(--green);padding:.6rem 1rem;margin:1rem 0;border-radius:0 6px 6px 0;font-size:.9rem}
+.warn{background:#2a1a1a;border-left:3px solid var(--red);padding:.6rem 1rem;margin:1rem 0;border-radius:0 6px 6px 0;font-size:.9rem}
+nav{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1rem;margin:1rem 0}
+nav a{margin-right:1rem;white-space:nowrap}
+footer{text-align:center;margin-top:3rem;padding:1rem;color:#8b949e;font-size:.85rem}
+ul,ol{padding-left:1.5rem}
+.breadcrumb{color:#8b949e;font-size:.9rem;margin-bottom:1rem}
+.breadcrumb a{color:var(--accent)}
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="04-dbnet-detection.html">← 上一篇</a> | <a href="index.html">首页</a> | <a href="06-ctc-decoding.html">下一篇: CTC 解码 →</a></p>
+
+<h1>5. SVTR 文字识别原理</h1>
+<p>SVTR = <strong>S</strong>ingle <strong>V</strong>isual <strong>T</strong>ransformer for <strong>R</strong>ecognition。本质是将裁好的文字图片"翻译"成文字内容。</p>
+
+<div class="card">
+<h2>5.1 CNN vs Transformer</h2>
+<table>
+<tr><th></th><th>CNN (传统)</th><th>Transformer (SVTR)</th></tr>
+<tr><td>工作方式</td><td>逐层卷积→池化</td><td>自注意力</td></tr>
+<tr><td>感受野</td><td>局部→全局 (慢)</td><td>全局 (快)</td></tr>
+<tr><td>长距离依赖</td><td>难</td><td>容易</td></tr>
+<tr><td>并行度</td><td>中</td><td>高</td></tr>
+<tr><td>类比</td><td>逐行扫描</td><td>整体观察</td></tr>
+</table>
+<h3>电器工程类比</h3>
+<ul>
+<li><strong>CNN</strong> 像用万用表逐点测电压——局部逐步前进</li>
+<li><strong>Transformer</strong> 像用红外热成像仪——同时捕获全局温度分布</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>5.2 SVTR 处理流程 (逐步详解)</h2>
+
+<h3>Step 1: 图片裁剪</h3>
+<p>从检测框中裁剪出文字区域，透视变换校正角度：</p>
+<pre><code>原图 + 文本框坐标 [(x1,y1),(x2,y2),(x3,y3),(x4,y4)]
+  ↓ cv2.getPerspectiveTransform()
+  ↓ 把任意四边形 → 矩形
+  ↓ 高度固定 48px, 宽度按比例
+裁剪结果: 48×W×3 (W 取决于文字长度)</code></pre>
+
+<h3>Step 2: 预处理</h3>
+<pre><code>resize 到 (48, W) 或 (48, 320) if W>320
+  → 归一化: [0, 255] → [0, 1] → [-1, 1]
+  → mean=0.5, std=0.5
+  → HWC → CHW → BCHW</code></pre>
+<div class="warn"><strong>⚠️</strong> 识别模型的归一化不是 ImageNet 标准！使用 mean=0.5, std=0.5 映射到 [-1, 1]，切勿混用检测模型的归一化参数。</div>
+
+<h3>Step 3: Patch Embedding</h3>
+<p>把 48×W 图片切割成小块 (patch)，每块变成固定维度的向量：</p>
+<pre><code>图片 48×W×3
+  ↓ 切成 ⌈H/4⌉ × ⌈W/4⌉ 个小块
+  ↓ 每块 4×4×3 像素
+  ↓ 展平成 48 维向量
+  ↓ 线性投影 → 192 维向量 (SVTR embedding size)</code></pre>
+<p>类比：就像把 PCB 分成若干网格，每个网格用一个特征向量描述（含铜箔密度、走线方向等）。</p>
+
+<h3>Step 4: Transformer Encoder</h3>
+<p>多层自注意力层交替处理每个 patch 的表示：</p>
+<pre><code>每个 patch 的向量 (192维)
+  ↓ 自注意力 (Self-Attention)
+  ↓ 每个 patch 都能"看到"其他所有 patch
+  ↓ 理解某个字符与前后字符的关系
+  ↓ 例如: "电" 的前后是 "压稳定"，有助于识别
+  ↓ 前馈网络 (FFN)
+  ↓ 进一步非线性变换
+  ↓ × N 层 (SVTR 用 12 层)</code></pre>
+
+<h3>Step 5: CTC Head</h3>
+<p>最后全连接层把 192 维映射到 18385 维（每个字符类别的概率）：</p>
+<pre><code>shape: (B, T, 192) → Linear → (B, T, 18385)
+  ↓ 每个时间步 T 输出一个 18385 维的字符概率分布
+  ↓ 例如 T=20 step3 的输出:
+  ↓   [0]: 0.12 (blank)
+  ↓   [5]: 0.78 (可能是 '你')
+  ↓   [143]: 0.02 (可能是 '好')
+  ↓   ...</code></pre>
+<p>到这一步，我们得到每列的字符概率——还不是最终文字。解码交给 CTC 完成。<br>详见 <a href="06-ctc-decoding.html">第6章 CTC 解码</a>。</p>
+</div>
+
+<div class="card">
+<h2>5.3 模型规格</h2>
+<table>
+<tr><th>参数</th><th>值</th><th>说明</th></tr>
+<tr><td>Input</td><td>3×48×W</td><td>W 可变 (≤3200)</td></tr>
+<tr><td>Patch Size</td><td>4×4</td><td>下采样 4 倍</td></tr>
+<tr><td>Embedding Dim</td><td>192</td><td>每 patch 的特征维度</td></tr>
+<tr><td>Encoder 层数</td><td>12</td><td>Transformer 层数</td></tr>
+<tr><td>Head 数</td><td>3</td><td>多头注意力头数</td></tr>
+<tr><td>Output</td><td>T×18385</td><td>T ≈ W/4</td></tr>
+<tr><td>参数量</td><td>~4.3M</td><td>约 430 万参数</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2>5.4 为什么 SVTR 比 CRNN 好？</h2>
+<p>PP-OCRv4 及之前版本用 CRNN (CNN+RNN) 识别。PP-OCRv5 改为 SVTR：</p>
+<table>
+<tr><th></th><th>CRNN (v4)</th><th>SVTR (v5)</th></tr>
+<tr><td>序列建模</td><td>BiLSTM (RNN)</td><td>Self-Attention</td></tr>
+<tr><td>长文本</td><td>容易遗忘</td><td>全局感知</td></tr>
+<tr><td>并行</td><td>串行 (慢)</td><td>并行 (快)</td></tr>
+<tr><td>精度</td><td>中</td><td>高 +3~5%</td></tr>
+</table>
+<div class="note">SVTR 的全局自注意力特别适合中文——汉字是方块字，上下文依赖强。</div>
+</div>
+
+<nav><a href="04-dbnet-detection.html">← 上一篇</a> <a href="index.html">首页</a> <a href="06-ctc-decoding.html">下一篇: CTC →</a></nav>
+<footer>ocronnx · <a href="https://github.com/tydfgt/ocronnx">GitHub</a></footer>
+</body>
+</html>

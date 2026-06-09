@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ONNX 格式 — ocronnx 基础知识</title>
+<style>
+:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--text:#c9d1d9;--accent:#58a6ff;--green:#3fb950;--orange:#d29922;--red:#f85149;--purple:#a371f7}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);line-height:1.8;max-width:920px;margin:0 auto;padding:2rem 1rem}
+h1{font-size:2rem}h2{font-size:1.5rem;margin:2.5rem 0 1rem;padding-bottom:.3rem;border-bottom:1px solid var(--border)}
+h3{font-size:1.15rem;margin:1.4rem 0 .6rem;color:var(--accent)}
+p,li{margin:.6rem 0}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+code{background:#1c2128;padding:.15em .4em;border-radius:4px;font-family:Consolas,monospace;font-size:.88em}
+pre{background:#1c2128;padding:1rem;border-radius:6px;overflow-x:auto;font-size:.82rem;line-height:1.5}
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1.2rem;margin:1rem 0}
+table{width:100%;border-collapse:collapse;margin:1rem 0}th,td{padding:.5rem .8rem;text-align:left;border-bottom:1px solid var(--border)}th{font-weight:600}
+.note{background:#1a2a1a;border-left:3px solid var(--green);padding:.6rem 1rem;margin:1rem 0;border-radius:0 6px 6px 0;font-size:.9rem}
+.warn{background:#2a1a1a;border-left:3px solid var(--red);padding:.6rem 1rem;margin:1rem 0;border-radius:0 6px 6px 0;font-size:.9rem}
+nav{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1rem;margin:1rem 0}
+nav a{margin-right:1rem;white-space:nowrap}
+footer{text-align:center;margin-top:3rem;padding:1rem;color:#8b949e;font-size:.85rem}
+ul,ol{padding-left:1.5rem}
+.breadcrumb{color:#8b949e;font-size:.9rem;margin-bottom:1rem}
+.breadcrumb a{color:var(--accent)}
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="02-ppocr-model.html">← 上一篇</a> | <a href="index.html">首页</a> | <a href="04-dbnet-detection.html">下一篇: DBNet 检测 →</a></p>
+
+<h1>3. ONNX 格式详解</h1>
+<p><strong>ONNX = Open Neural Network Exchange（开放神经网络交换格式）</strong></p>
+
+<div class="card">
+<h2>3.1 为什么需要 ONNX？</h2>
+<p>深度学习框架很多：PyTorch (Meta)、TensorFlow (Google)、PaddlePaddle (百度)、MXNet 等。每个框架有自己的<strong>专有模型格式</strong>，互不兼容。</p>
+<p>类比电器工程：就像不同品牌的 PLC 有各自的编程语言和文件格式——西门子用 LAD/STL，三菱用梯形图。ONNX 就像是<strong>IEC 61131-3 标准</strong>——提供一个通用的中间表示。</p>
+
+<h3>模型格式对比</h3>
+<table>
+<tr><th>框架</th><th>专有格式</th><th>互操作</th></tr>
+<tr><td>PaddlePaddle</td><td>.pdmodel / PIR</td><td>❌ 只能 PaddlePaddle 用</td></tr>
+<tr><td>PyTorch</td><td>.pt / .pth</td><td>❌ 只能 PyTorch 用</td></tr>
+<tr><td>TensorFlow</td><td>.pb / SavedModel</td><td>❌ 只能 TensorFlow 用</td></tr>
+<tr><td><strong>ONNX</strong></td><td><strong>.onnx</strong></td><td><strong>✅ 多引擎通用</strong></td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2>3.2 ONNX 的工作原理</h2>
+<p>ONNX 定义了一套<strong>标准算子</strong>（operator），如 Conv、Relu、Add、MatMul 等。模型被表示为一个<strong>计算图</strong>（有向无环图），节点是算子，边是数据流。</p>
+<pre><code>PaddlePaddle 模型
+  ↓ paddle.onnx.export()
+  ↓ 将 Paddle 算子 → 映射到 ONNX 标准算子
+ONNX 模型 (.onnx)
+  ↓ 可以被以下引擎加载:
+  ├── OpenCV DNN (本项目用)  ← 最轻量
+  ├── ONNX Runtime            ← 微软维护, 全平台
+  ├── TensorRT                ← NVIDIA, 最快但编译慢
+  └── OpenVINO                ← Intel, CPU 优化</code></pre>
+</div>
+
+<div class="card">
+<h2>3.3 ONNX Opset 版本</h2>
+<p>ONNX 标准持续演进，每个版本叫一个 <strong>opset</strong>（算子集版本）。</p>
+<ul>
+<li>opset 11: 基础算子，广泛兼容</li>
+<li>opset 14: 本项目使用，兼容 OpenCV 4.x</li>
+<li>opset 17+: 新增 LayerNorm、GridSample 等</li>
+</ul>
+<p>版本选择原则：<strong>用目标推理引擎支持的最高版本</strong>。本项目用 opset 14。</p>
+</div>
+
+<div class="card">
+<h2>3.4 本项目中的 ONNX 导出流程</h2>
+<pre><code># Step 1: 加载 PIR 模型
+det_model = paddle.jit.load('model_dir/inference')  # PIR格式
+
+# Step 2: 导出 ONNX
+paddle.onnx.export(
+    det_model,
+    'output.onnx',
+    input_spec=[paddle.static.InputSpec(shape=[1,3,-1,-1], dtype='float32')],
+    opset_version=14
+)
+
+# Step 3: 简化 (使 OpenCV DNN 可加载)
+import onnx; from onnxsim import simplify
+model = onnx.load('output.onnx')
+model_simp, check = simplify(model)
+onnx.save(model_simp, 'output_sim.onnx')</code></pre>
+</div>
+
+<div class="card">
+<h2>3.5 为什么需要 onnxsim 简化？</h2>
+<p>OpenCV DNN 的 ONNX 解析器并不支持所有 ONNX 算子。原始 ONNX 包含一些 OpenCV 不认识的算子组合（如某些 Reshape 模式）。<code>onnxsim</code> 会：</p>
+<ul>
+<li>常量折叠 (Constant Folding)</li>
+<li>消除冗余算子</li>
+<li>合并连续操作</li>
+<li>简化计算图结构</li>
+</ul>
+<p>简化后模型大小不变，但计算图更简洁，OpenCV DNN 可以正常加载。</p>
+<div class="note">简化前后模型输出数值误差 &lt; 0.0002，精度无损失。</div>
+</div>
+
+<div class="card">
+<h2>3.6 ONNX vs 直接推理</h2>
+<table>
+<tr><th></th><th>PaddlePaddle 原生</th><th>ONNX + OpenCV DNN</th></tr>
+<tr><td>依赖</td><td>PaddlePaddle 运行时</td><td>仅 OpenCV</td></tr>
+<tr><td>GPU支持</td><td>需 PaddlePaddle GPU版</td><td>OpenCV CUDA即可</td></tr>
+<tr><td>JetPack 6</td><td>❌ 不支持</td><td>✅ 支持</td></tr>
+<tr><td>速度</td><td>快 (如果可用)</td><td>快 (~1.0s/图)</td></tr>
+<tr><td>模型体积</td><td>22MB</td><td>21MB</td></tr>
+</table>
+</div>
+
+<nav><a href="02-ppocr-model.html">← 上一篇</a> <a href="index.html">首页</a> <a href="04-dbnet-detection.html">下一篇: DBNet →</a></nav>
+<footer>ocronnx · <a href="https://github.com/tydfgt/ocronnx">GitHub</a></footer>
+</body>
+</html>
